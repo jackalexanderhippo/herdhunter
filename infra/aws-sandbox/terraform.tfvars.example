@@ -1,0 +1,7 @@
+aws_region        = "us-east-1"
+project_name      = "herdhunter"
+environment       = "sandbox"
+deploy_service    = false
+image_tag         = "demo"
+demo_auth_bypass  = true
+allowed_http_cidrs = ["0.0.0.0/0"]

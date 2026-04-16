@@ -1,0 +1,7 @@
+<svg width="440" height="96" viewBox="0 0 440 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="16" width="64" height="64" rx="14" fill="#102A43"/>
+  <path d="M21 31h8v11h14V31h8v34h-8V49H29v16h-8V31Z" fill="#F7FAFC"/>
+  <path d="M24 72c8-7 16-7 25 0" stroke="#34D399" stroke-width="4" stroke-linecap="round"/>
+  <text x="84" y="58" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="700" fill="#102A43">Herdhunter</text>
+  <text x="86" y="78" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600" fill="#486581">Hiring workspace</text>
+</svg>

@@ -1,0 +1,353 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model User {
+  id               String                @id @default(cuid())
+  name             String?
+  email            String?               @unique
+  emailVerified    DateTime?
+  image            String?
+  passwordHash     String?
+  role             Role                  @default(HIRING_TEAM)
+  createdAt        DateTime              @default(now())
+  accounts         Account[]
+  sessions         Session[]
+  notes            Note[]
+  interviewNotes   InterviewNote[]
+  candidateChats   CandidateChatMessage[]
+  sharedNotes      InterviewSharedNote[]      @relation("SharedNoteUpdatedBy")
+  questionResponses InterviewQuestionResponse[]
+  sectionScores    InterviewSectionScore[]
+  interviewRecommendations InterviewRecommendation[]
+  interviews       InterviewInterviewer[]
+  positionAssessmentsUpdated PositionCandidateAssessment[] @relation("PositionAssessmentUpdatedBy")
+  invitationsSent  Invitation[]          @relation("InvitedBy")
+  templatesCreated InterviewTemplate[]
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  email       String
+  role        Role      @default(HIRING_TEAM)
+  token       String    @unique @default(cuid())
+  invitedById String
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
+  createdAt   DateTime  @default(now())
+  usedAt      DateTime?
+}
+
+// questions is a JSON array stored as text: ["Q1", "Q2", ...]
+model InterviewTemplate {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  questions   String
+  createdById String
+  createdBy   User        @relation(fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  interviews  Interview[]
+}
+
+model Profession {
+  id         String      @id @default(cuid())
+  name       String      @unique
+  candidates Candidate[]
+}
+
+model OpenPosition {
+  id             String                     @id @default(cuid())
+  title          String
+  team           String?
+  level          String?
+  targetHires    Int                        @default(1)
+  status         OpenPositionStatus         @default(OPEN)
+  hiringLead     String?
+  interviewLead  String?
+  description    String?
+  eployPositionId String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  candidates     Candidate[]
+  assessments    PositionCandidateAssessment[]
+  alternativeRecommendations InterviewRecommendation[] @relation("InterviewRecommendationAlternativePosition")
+}
+
+model Candidate {
+  id           String          @id @default(cuid())
+  name         String
+  email        String?
+  phone        String?
+  position     String
+  openPositionId String?
+  openPosition OpenPosition?   @relation(fields: [openPositionId], references: [id], onDelete: SetNull)
+  noticePeriodDays Int?
+  salaryExpectation Int?
+  recommendedSalary Int?
+  salaryExpectationBand String?
+  recommendedBand String?
+  hiringSummary String?
+  eployCandidateId String?
+  eployCvUrl    String?
+  eployMetadata String?
+  eployLastSyncAt DateTime?
+  eployFeedbackSummary String?
+  eployFeedbackPushedAt DateTime?
+  professionId String?
+  profession   Profession?     @relation(fields: [professionId], references: [id])
+  status       CandidateStatus @default(NEW)
+  cvPath       String?
+  cvFilename   String?
+  cvUploadedAt DateTime?
+  cvDeleteAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  notes        Note[]
+  chatMessages CandidateChatMessage[]
+  interviews   Interview[]
+  assessments  PositionCandidateAssessment[]
+}
+
+model Note {
+  id          String    @id @default(cuid())
+  content     String
+  type        NoteType  @default(GENERAL)
+  authorId    String
+  candidateId String
+  createdAt   DateTime  @default(now())
+  author      User      @relation(fields: [authorId], references: [id])
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model Interview {
+  id           String                 @id @default(cuid())
+  candidateId  String
+  scheduledAt  DateTime
+  location     String?
+  calendarEventId String?
+  calendarEventUrl String?
+  geminiNotes  String?
+  geminiNotesImportedAt DateTime?
+  status       InterviewStatus        @default(SCHEDULED)
+  stage        Int                    @default(1)
+  stageName    String?
+  templateId   String?
+  createdAt    DateTime               @default(now())
+  candidate    Candidate              @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  template     InterviewTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  interviewers InterviewInterviewer[]
+  notes        InterviewNote[]
+  sharedNote   InterviewSharedNote?
+  questionResponses InterviewQuestionResponse[]
+  sectionScores InterviewSectionScore[]
+  recommendations InterviewRecommendation[]
+}
+
+model InterviewInterviewer {
+  interviewId String
+  userId      String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([interviewId, userId])
+}
+
+model InterviewNote {
+  id          String    @id @default(cuid())
+  content     String
+  rating      Int?
+  authorId    String
+  interviewId String
+  createdAt   DateTime  @default(now())
+  author      User      @relation(fields: [authorId], references: [id])
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+}
+
+model CandidateChatMessage {
+  id          String    @id @default(cuid())
+  content     String
+  candidateId String
+  authorId    String
+  createdAt   DateTime  @default(now())
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model PositionCandidateAssessment {
+  id             String                   @id @default(cuid())
+  openPositionId String
+  candidateId    String
+  recommendation AssessmentRecommendation @default(HOLD)
+  summary        String                   @default("")
+  updatedById    String?
+  updatedAt      DateTime                 @updatedAt
+  openPosition   OpenPosition             @relation(fields: [openPositionId], references: [id], onDelete: Cascade)
+  candidate      Candidate                @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  updatedBy      User?                    @relation("PositionAssessmentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([openPositionId, candidateId])
+}
+
+model InterviewSharedNote {
+  interviewId String   @id
+  content     String   @default("")
+  version     Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  updatedBy   User?    @relation("SharedNoteUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model InterviewQuestionResponse {
+  id          String    @id @default(cuid())
+  interviewId String
+  authorId    String
+  questionKey String
+  questionText String
+  answer      String    @default("")
+  score       Int?
+  updatedAt   DateTime  @updatedAt
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([interviewId, authorId, questionKey])
+}
+
+model InterviewSectionScore {
+  id          String    @id @default(cuid())
+  interviewId String
+  authorId    String
+  section     String
+  score       Int
+  notes       String?
+  updatedAt   DateTime  @updatedAt
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([interviewId, authorId, section])
+}
+
+model InterviewRecommendation {
+  id                 String                     @id @default(cuid())
+  interviewId        String
+  authorId           String
+  recommendation     InterviewOutcomeRecommendation
+  recommendedLevel   InterviewRecommendedLevel?
+  levelCalibration   InterviewLevelCalibration?
+  alternativeOpenPositionId String?
+  summary            String                     @default("")
+  candidateFeedback  String                     @default("")
+  updatedAt          DateTime                   @updatedAt
+  interview          Interview                  @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  author             User                       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  alternativeOpenPosition OpenPosition?         @relation("InterviewRecommendationAlternativePosition", fields: [alternativeOpenPositionId], references: [id], onDelete: SetNull)
+
+  @@unique([interviewId, authorId])
+}
+
+model AppSetting {
+  id              Int      @id @default(1)
+  cvRetentionDays Int      @default(30)
+  updatedAt       DateTime @updatedAt
+}
+
+enum Role {
+  HIRING_TEAM
+  MAIN_INTERVIEWER
+  ADMIN_INTERVIEWER
+}
+
+enum OpenPositionStatus {
+  OPEN
+  ON_HOLD
+  FILLED
+  CLOSED
+}
+
+enum AssessmentRecommendation {
+  STRONG_YES
+  YES
+  HOLD
+  NO
+}
+
+enum InterviewOutcomeRecommendation {
+  UNSUCCESSFUL
+  YES_AT_DIFFERENT_LEVEL
+  PROCEED_TO_NEXT_ROUND
+}
+
+enum InterviewRecommendedLevel {
+  JUNIOR
+  INTERMEDIATE
+  SENIOR
+  LEAD
+  PRINCIPAL
+}
+
+enum InterviewLevelCalibration {
+  LOW
+  MID
+  HIGH
+}
+
+enum CandidateStatus {
+  NEW
+  SCREENING
+  INTERVIEW_SCHEDULED
+  INTERVIEW_DONE
+  OFFERED
+  HIRED
+  REJECTED
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum NoteType {
+  GENERAL
+  PRE_INTERVIEW
+}

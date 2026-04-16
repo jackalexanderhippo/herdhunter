@@ -1,0 +1,14 @@
+.git
+.next
+.terraform
+node_modules
+coverage
+build
+.env
+.env.*
+*.pem
+*.log
+prisma/dev.db
+infra/**/.terraform
+infra/**/*.tfstate
+infra/**/*.tfstate.*
