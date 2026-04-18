@@ -30,6 +30,11 @@ async function ensureTemplate({ name, description, questions, createdById }) {
 
 async function main() {
   const demoUserId = "dev-user-local";
+  const interviewers = [
+    { id: "mike-stoodley", name: "Mike Stoodley", email: "mike.stoodley@herdhunter.local", role: "MAIN_INTERVIEWER" },
+    { id: "tom-halson", name: "Tom Halson", email: "tom.halson@herdhunter.local", role: "MAIN_INTERVIEWER" },
+    { id: "james-boobier", name: "James Boobier", email: "james.boobier@herdhunter.local", role: "MAIN_INTERVIEWER" },
+  ];
 
   await prisma.appSetting.upsert({
     where: { id: 1 },
@@ -51,6 +56,18 @@ async function main() {
       role: "ADMIN_INTERVIEWER",
     },
   });
+
+  for (const user of interviewers) {
+    await prisma.user.upsert({
+      where: { id: user.id },
+      update: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      create: user,
+    });
+  }
 
   const professions = ["Engineering", "TA", "QA", "Data", "User Research", "UX", "BA", "PL", "Delivery", "People"];
   await prisma.candidate.updateMany({
@@ -262,31 +279,33 @@ Overall scoring guidance:
       team: "Engineering",
       level: "Senior",
       targetHires: 1,
-      hiringLead: "Adam E / James H",
-      interviewLead: "Robert C / Alex M",
     },
     {
       title: "Principal Software Engineer",
       team: "Engineering",
       level: "Principal",
       targetHires: 1,
-      hiringLead: "Mike / Tom / Dapherz",
-      interviewLead: "Robert C / Alex M",
     },
   ];
 
   for (const position of positions) {
     await prisma.openPosition.upsert({
       where: { id: `${position.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-seed` },
-      update: position,
+      update: {
+        ...position,
+        hiringLead: null,
+        interviewLead: null,
+      },
       create: {
         id: `${position.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-seed`,
         ...position,
+        hiringLead: null,
+        interviewLead: null,
       },
     });
   }
 
-  console.log("Seeded app settings, demo user, professions, open positions, and interview templates.");
+  console.log("Seeded app settings, demo user, interviewers, professions, open positions, and interview templates.");
 }
 
 main()

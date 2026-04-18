@@ -218,7 +218,7 @@ export class EployRecruitmentSourceClient implements RecruitmentSourceClient {
       description: firstString(rawPosition, ["DescriptionHTML", "DescriptionText", "Description", "AdvertText"]),
       team: typeof teamValue === "string" ? teamValue : null,
       level: typeof levelValue === "string" ? levelValue : null,
-      companyId: firstString(rawPosition, ["Company.Id", "CompanyID", "CompanyId"]),
+      companyId: firstString(rawPosition, ["Company.Id", "CompanyID", "CompanyId", "Companies.0.Id"]),
       rawPosition,
       rawQuestions,
     };

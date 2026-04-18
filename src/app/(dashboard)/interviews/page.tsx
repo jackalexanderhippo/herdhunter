@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
-import { Calendar, Clock, MapPin } from "lucide-react";
+import { Calendar, Clock } from "lucide-react";
 import { canSeeAllInterviews } from "@/lib/access";
 import type { InterviewStatus, Role } from "@prisma/client";
 
@@ -12,7 +12,6 @@ interface User { id: string; name?: string | null; image?: string | null; role: 
 interface Interview {
     id: string;
     scheduledAt: string;
-    location?: string;
     status: InterviewStatus;
     candidate: { id: string; name: string; position: string; profession?: { name: string } | null; openPosition?: { title: string; level?: string | null } | null };
     interviewers: { user: User }[];
@@ -72,11 +71,6 @@ export default function InterviewsPage() {
                         <Clock size={12} />
                         {format(new Date(iv.scheduledAt), "HH:mm")}
                     </div>
-                    {iv.location && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                            <MapPin size={12} />{iv.location}
-                        </div>
-                    )}
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                     {iv.notes.length} note{iv.notes.length !== 1 ? "s" : ""} · {iv.interviewers.length} interviewer{iv.interviewers.length !== 1 ? "s" : ""}

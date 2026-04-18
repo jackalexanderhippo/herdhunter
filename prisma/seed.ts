@@ -40,6 +40,12 @@ async function ensureTemplate({
 
 async function main() {
     const demoUserId = "dev-user-local";
+    const interviewers = [
+        { id: "mike-stoodley", name: "Mike Stoodley", email: "mike.stoodley@herdhunter.local", role: "MAIN_INTERVIEWER" as const },
+        { id: "tom-halson", name: "Tom Halson", email: "tom.halson@herdhunter.local", role: "MAIN_INTERVIEWER" as const },
+        { id: "james-boobier", name: "James Boobier", email: "james.boobier@herdhunter.local", role: "MAIN_INTERVIEWER" as const },
+    ];
+
     await prisma.appSetting.upsert({
         where: { id: 1 },
         update: {},
@@ -60,6 +66,18 @@ async function main() {
             role: "ADMIN_INTERVIEWER",
         },
     });
+
+    for (const user of interviewers) {
+        await prisma.user.upsert({
+            where: { id: user.id },
+            update: {
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
+            create: user,
+        });
+    }
 
     const professions = ["Engineering", "TA", "QA", "Data", "User Research", "UX", "BA", "PL", "Delivery", "People"];
     await prisma.candidate.updateMany({
@@ -268,8 +286,6 @@ Overall scoring guidance:
             team: "Engineering",
             level: "Senior",
             targetHires: 1,
-            hiringLead: "Adam E / James H",
-            interviewLead: "Robert C / Alex M",
         },
         {
             id: "principal-software-engineer-seed",
@@ -277,8 +293,6 @@ Overall scoring guidance:
             team: "Engineering",
             level: "Principal",
             targetHires: 1,
-            hiringLead: "Mike / Tom / Dapherz",
-            interviewLead: "Robert C / Alex M",
         },
     ];
 
@@ -290,14 +304,18 @@ Overall scoring guidance:
                 team: position.team,
                 level: position.level,
                 targetHires: position.targetHires,
-                hiringLead: position.hiringLead,
-                interviewLead: position.interviewLead,
+                hiringLead: null,
+                interviewLead: null,
             },
-            create: position,
+            create: {
+                ...position,
+                hiringLead: null,
+                interviewLead: null,
+            },
         });
     }
 
-    console.log("Seeded app settings, professions, open positions, and interview templates:", professions.join(", "));
+    console.log("Seeded app settings, professions, interviewers, open positions, and interview templates:", professions.join(", "));
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());

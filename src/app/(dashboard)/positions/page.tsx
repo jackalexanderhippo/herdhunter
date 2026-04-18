@@ -15,8 +15,6 @@ interface OpenPosition {
     level?: string | null;
     targetHires: number;
     status: OpenPositionStatus;
-    hiringLead?: string | null;
-    interviewLead?: string | null;
     eployPositionId?: string | null;
     _count: { candidates: number; assessments: number };
     candidates: Array<{ id: string; status: CandidateStatus }>;
@@ -53,7 +51,7 @@ export default function PositionsPage() {
 
 
     const filtered = positions.filter((position) => {
-        const haystack = [position.title, position.team, position.level, position.hiringLead, position.interviewLead]
+        const haystack = [position.title, position.team, position.level]
             .filter(Boolean)
             .join(" ")
             .toLowerCase();
@@ -134,8 +132,6 @@ export default function PositionsPage() {
                                     </div>
 
                                     <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", color: "var(--text-secondary)", fontSize: "0.82rem" }}>
-                                        {position.hiringLead && <div>Hiring lead: {position.hiringLead}</div>}
-                                        {position.interviewLead && <div>Interview lead: {position.interviewLead}</div>}
                                         {position.eployPositionId && <div>Source vacancy ID: {position.eployPositionId}</div>}
                                         <div style={{ color: "var(--text-muted)" }}>
                                             <Target size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: "0.3rem" }} />

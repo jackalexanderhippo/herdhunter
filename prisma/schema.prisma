@@ -59,6 +59,7 @@ model User {
   questionResponses InterviewQuestionResponse[]
   sectionScores    InterviewSectionScore[]
   interviewRecommendations InterviewRecommendation[]
+  workspaceLocks   InterviewWorkspaceLock[]
   interviews       InterviewInterviewer[]
   positionAssessmentsUpdated PositionCandidateAssessment[] @relation("PositionAssessmentUpdatedBy")
   invitationsSent  Invitation[]          @relation("InvitedBy")
@@ -181,6 +182,7 @@ model Interview {
   questionResponses InterviewQuestionResponse[]
   sectionScores InterviewSectionScore[]
   recommendations InterviewRecommendation[]
+  workspaceLocks InterviewWorkspaceLock[]
 }
 
 model InterviewInterviewer {
@@ -283,6 +285,19 @@ model InterviewRecommendation {
   alternativeOpenPosition OpenPosition?         @relation("InterviewRecommendationAlternativePosition", fields: [alternativeOpenPositionId], references: [id], onDelete: SetNull)
 
   @@unique([interviewId, authorId])
+}
+
+model InterviewWorkspaceLock {
+  id          String    @id @default(cuid())
+  interviewId String
+  fieldKey    String
+  lockedById  String
+  expiresAt   DateTime
+  updatedAt   DateTime  @updatedAt
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  lockedBy    User      @relation(fields: [lockedById], references: [id], onDelete: Cascade)
+
+  @@unique([interviewId, fieldKey])
 }
 
 model AppSetting {

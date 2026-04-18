@@ -3,6 +3,24 @@ import { prisma } from "@/lib/db";
 import { PUBLIC_USER_SELECT } from "@/lib/public-user";
 import { NextResponse } from "next/server";
 
+function normalizeOptionalString(value: unknown) {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+async function resolveTemplateStageName(templateId: unknown) {
+    const normalizedTemplateId = normalizeOptionalString(templateId);
+    if (!normalizedTemplateId) return null;
+
+    const template = await prisma.interviewTemplate.findUnique({
+        where: { id: normalizedTemplateId },
+        select: { name: true },
+    });
+
+    return template?.name ?? null;
+}
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -30,31 +48,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const {
         status,
-        stage,
-        stageName,
         templateId,
-        location,
         scheduledAt,
         calendarEventId,
-        calendarEventUrl,
-        geminiNotes,
-        geminiNotesImportedAt,
         interviewerIds,
     } = await req.json();
+    const hasTemplateUpdate = templateId !== undefined;
+    const resolvedTemplateId = hasTemplateUpdate ? normalizeOptionalString(templateId) : undefined;
+    const resolvedStageName = hasTemplateUpdate ? await resolveTemplateStageName(templateId) : undefined;
 
     const interview = await prisma.interview.update({
         where: { id },
         data: {
             ...(status !== undefined && { status }),
-            ...(stage !== undefined && { stage }),
-            ...(stageName !== undefined && { stageName }),
-            ...(templateId !== undefined && { templateId }),
-            ...(location !== undefined && { location }),
+            ...(hasTemplateUpdate && { templateId: resolvedTemplateId, stageName: resolvedStageName }),
             ...(scheduledAt !== undefined && { scheduledAt: new Date(scheduledAt) }),
-            ...(calendarEventId !== undefined && { calendarEventId }),
-            ...(calendarEventUrl !== undefined && { calendarEventUrl }),
-            ...(geminiNotes !== undefined && { geminiNotes }),
-            ...(geminiNotesImportedAt !== undefined && { geminiNotesImportedAt: geminiNotesImportedAt ? new Date(geminiNotesImportedAt) : null }),
+            ...(calendarEventId !== undefined && { calendarEventId: normalizeOptionalString(calendarEventId) }),
             ...(interviewerIds !== undefined && Array.isArray(interviewerIds) && {
                 interviewers: {
                     deleteMany: {},

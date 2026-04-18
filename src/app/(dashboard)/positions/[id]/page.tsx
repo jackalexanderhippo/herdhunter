@@ -59,8 +59,6 @@ interface PositionDetail {
     level?: string | null;
     targetHires: number;
     status: OpenPositionStatus;
-    hiringLead?: string | null;
-    interviewLead?: string | null;
     description?: string | null;
     eployPositionId?: string | null;
     candidates: CandidateRow[];
@@ -215,8 +213,6 @@ export default function PositionDetailPage({ params }: { params: Promise<{ id: s
                         {[
                             { label: "Target hires", value: position.targetHires.toString() },
                             { label: "Candidates", value: position.candidates.length.toString() },
-                            { label: "Hiring lead", value: position.hiringLead },
-                            { label: "Interview lead", value: position.interviewLead },
                             { label: "Level", value: position.level },
                             { label: "Source vacancy ID", value: position.eployPositionId },
                         ].map(({ label, value }) => value ? (

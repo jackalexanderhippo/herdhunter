@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "pnpm test:unit",
+    "test:unit": "jest --runInBand",
+    "test:e2e": "playwright test",
     "postinstall": "prisma generate",
     "db:push": "DATABASE_URL='file:./dev.db' prisma db push",
     "db:seed": "DATABASE_URL='file:./dev.db' node prisma/seed.mjs",
@@ -42,12 +45,15 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@types/jest": "^30.0.0",
     "@types/formidable": "^3.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jest": "^30.2.0",
     "prisma": "^6",
     "typescript": "^5"
   }

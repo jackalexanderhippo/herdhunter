@@ -14,7 +14,14 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm run build
+ARG BUILD_DATABASE_URL=file:./dev.db
+RUN pnpm run db:push
+RUN AUTH_SECRET=build-auth-secret \
+    AUTH_GOOGLE_ID=build-google-id \
+    AUTH_GOOGLE_SECRET=build-google-secret \
+    DEMO_AUTH_BYPASS=true \
+    DATABASE_URL=$BUILD_DATABASE_URL \
+    pnpm run build
 
 FROM base AS runner
 WORKDIR /app

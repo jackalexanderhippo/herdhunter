@@ -10,13 +10,14 @@ import {
     Plus, X, Layers,
 } from "lucide-react";
 import { TemplateContent } from "@/components/templates/TemplateContent";
+import { getInterviewTemplateOverview } from "@/lib/interview-workspace";
 import { parseTemplateQuestions } from "@/lib/interview-templates";
-import { STATUS_LABELS, STATUS_COLORS, ROLE_LABELS, canManageCandidates, canInterview, getInterviewerHighlight } from "@/lib/utils";
+import { STATUS_LABELS, STATUS_COLORS, ROLE_LABELS, canInterview, getInterviewerHighlight } from "@/lib/utils";
 import type { CandidateStatus, NoteType, InterviewStatus, Role } from "@prisma/client";
 
 interface User { id: string; name?: string | null; image?: string | null; role: Role; }
 interface Note { id: string; content: string; type: NoteType; author: User; createdAt: string; }
-interface Template { id: string; name: string; questions: string; }
+interface Template { id: string; name: string; description?: string | null; questions: string; }
 interface OpenPosition {
     id: string;
     title: string;
@@ -93,6 +94,32 @@ interface UnifiedComment {
     rating?: number | null;
 }
 
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => index.toString().padStart(2, "0"));
+const MINUTE_OPTIONS = ["00", "15", "30", "45"];
+
+function splitInterviewDateParts(input?: string | Date | null) {
+    if (!input) {
+        return { date: "", hour: "09", minute: "00" };
+    }
+
+    const scheduledAt = input instanceof Date ? new Date(input) : new Date(input);
+    const rounded = new Date(scheduledAt);
+    const minute = rounded.getMinutes();
+    const roundedMinute = Math.round(minute / 15) * 15;
+
+    if (roundedMinute === 60) {
+        rounded.setHours(rounded.getHours() + 1, 0, 0, 0);
+    } else {
+        rounded.setMinutes(roundedMinute, 0, 0);
+    }
+
+    return {
+        date: format(rounded, "yyyy-MM-dd"),
+        hour: format(rounded, "HH"),
+        minute: format(rounded, "mm"),
+    };
+}
+
 function Avatar({ user }: { user: User }) {
     const initials = user.name?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) ?? "?";
     return <div className="avatar">{user.image ? <img src={user.image} alt={user.name ?? ""} /> : initials}</div>;
@@ -116,14 +143,12 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
     const [submitting, setSubmitting] = useState(false);
 
     const [interviewDate, setInterviewDate] = useState("");
-    const [interviewLocation, setInterviewLocation] = useState("");
+    const [interviewHour, setInterviewHour] = useState("09");
+    const [interviewMinute, setInterviewMinute] = useState("00");
     const [interviewStage, setInterviewStage] = useState(1);
-    const [interviewStageName, setInterviewStageName] = useState("");
     const [interviewTemplateId, setInterviewTemplateId] = useState("");
     const [selectedInterviewers, setSelectedInterviewers] = useState<string[]>([]);
     const [calendarEventId, setCalendarEventId] = useState("");
-    const [calendarEventUrl, setCalendarEventUrl] = useState("");
-    const [geminiNotes, setGeminiNotes] = useState("");
     const [interviewNote, setInterviewNote] = useState("");
     const [interviewQuestionNotes, setInterviewQuestionNotes] = useState<Record<string, string>>({});
     const [interviewRating, setInterviewRating] = useState(0);
@@ -178,28 +203,25 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
 
     const openSchedule = (interview?: Interview) => {
         if (interview) {
+            const parts = splitInterviewDateParts(interview.scheduledAt);
             setEditingInterviewId(interview.id);
             setInterviewStage(interview.stage);
-            setInterviewStageName(interview.stageName ?? "");
             setInterviewTemplateId(interview.templateId ?? "");
-            setInterviewDate(new Date(interview.scheduledAt).toISOString().slice(0, 16));
-            setInterviewLocation(interview.location ?? "");
+            setInterviewDate(parts.date);
+            setInterviewHour(parts.hour);
+            setInterviewMinute(parts.minute);
             setSelectedInterviewers(interview.interviewers.map(({ user }) => user.id));
             setCalendarEventId(interview.calendarEventId ?? "");
-            setCalendarEventUrl(interview.calendarEventUrl ?? "");
-            setGeminiNotes(interview.geminiNotes ?? "");
         } else {
             const nextStage = (candidate?.interviews.length ?? 0) + 1;
             setEditingInterviewId(null);
             setInterviewStage(nextStage);
-            setInterviewStageName("");
             setInterviewTemplateId("");
             setInterviewDate("");
-            setInterviewLocation("");
+            setInterviewHour("09");
+            setInterviewMinute("00");
             setSelectedInterviewers([]);
             setCalendarEventId("");
-            setCalendarEventUrl("");
-            setGeminiNotes("");
             const defaultTemplate =
                 templates.find((t) => t.name.toLowerCase().includes("coding")) ??
                 templates[0] ??
@@ -211,6 +233,7 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
 
     const submitInterview = async () => {
         if (!interviewDate) return;
+        const scheduledAt = new Date(`${interviewDate}T${interviewHour}:${interviewMinute}`).toISOString();
         setSubmitting(true);
         const isEditing = Boolean(editingInterviewId);
         const res = await fetch(isEditing ? `/api/interviews/${editingInterviewId}` : "/api/interviews", {
@@ -218,16 +241,10 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 ...(isEditing ? {} : { candidateId: id }),
-                scheduledAt: interviewDate,
-                location: interviewLocation,
-                stage: interviewStage,
-                stageName: interviewStageName || null,
+                scheduledAt,
                 templateId: interviewTemplateId || null,
                 interviewerIds: selectedInterviewers,
                 calendarEventId: calendarEventId || null,
-                calendarEventUrl: calendarEventUrl || null,
-                geminiNotes: geminiNotes.trim() || null,
-                geminiNotesImportedAt: geminiNotes.trim() ? new Date().toISOString() : null,
             }),
         });
         if (res.ok) {
@@ -309,7 +326,6 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
 
     const role = session?.user.role ?? "HIRING_TEAM";
     const canManage = true;
-    const canAssignPosition = true;
     const canInterviewNote = Boolean(session?.user) && canInterview(role);
     const interviewers = allUsers.filter((u) => u.role !== "HIRING_TEAM");
     const statuses: CandidateStatus[] = ["NEW", "SCREENING", "INTERVIEW_SCHEDULED", "INTERVIEW_DONE", "OFFERED", "HIRED", "REJECTED"];
@@ -335,7 +351,7 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
             createdAt: note.createdAt,
             author: note.author,
             source: "INTERVIEW" as const,
-            interviewLabel: `Stage ${interview.stage}${interview.stageName ? ` — ${interview.stageName}` : ""}`,
+            interviewLabel: `Stage ${interview.stage}${interview.template?.name ? ` — ${interview.template.name}` : interview.stageName ? ` — ${interview.stageName}` : ""}`,
             rating: note.rating ?? null,
         })),
     );
@@ -477,37 +493,67 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                 {sortedInterviews.map((iv) => {
                                     const summaries = getInterviewerSummaries(iv);
                                     return (
-                                        <div key={iv.id} className="surface-2">
-                                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "1.5rem", height: "1.5rem", borderRadius: "50%", background: "var(--accent)", color: "#fff", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0 }}>
+                                        <div
+                                            key={iv.id}
+                                            className="surface-2"
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => router.push(`/interviews/${iv.id}`)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter" || e.key === " ") {
+                                                    e.preventDefault();
+                                                    router.push(`/interviews/${iv.id}`);
+                                                }
+                                            }}
+                                            style={{ cursor: "pointer" }}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "1.5rem", height: "1.5rem", borderRadius: "50%", background: "var(--accent)", color: "#fff", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0, marginTop: "0.1rem" }}>
                                                     {iv.stage}
                                                 </div>
-                                                <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>
-                                                    {iv.stageName ? iv.stageName : `Stage ${iv.stage}`}
-                                                </span>
-                                                {iv.template && (
-                                                    <span className="chip" style={{ marginLeft: "auto", fontSize: "0.7rem" }}>
-                                                        <Layers size={10} style={{ marginRight: "0.25rem" }} />{iv.template.name}
-                                                    </span>
-                                                )}
-                                                <span className="chip" style={{ ...(iv.template ? {} : { marginLeft: "auto" }) }}>{iv.status}</span>
+                                                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", minWidth: 0, flex: 1 }}>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                                                        <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>
+                                                            {iv.template?.name ?? iv.stageName ?? `Stage ${iv.stage}`}
+                                                        </span>
+                                                        {iv.template && (
+                                                            <span className="chip" style={{ fontSize: "0.7rem" }}>
+                                                                <Layers size={10} style={{ marginRight: "0.25rem" }} />{iv.template.name}
+                                                            </span>
+                                                        )}
+                                                        <span className="chip">{iv.status}</span>
+                                                    </div>
+                                                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                                                        Click anywhere on this card to open the interview workspace.
+                                                    </div>
+                                                </div>
+                                                <div style={{ textAlign: "right", marginLeft: "auto" }}>
+                                                    <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.2rem" }}>
+                                                        Scheduled
+                                                    </div>
+                                                    <div style={{ fontWeight: 600, fontSize: "0.82rem" }}>
+                                                        {format(new Date(iv.scheduledAt), "d MMM yyyy")}
+                                                    </div>
+                                                    <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>
+                                                        {format(new Date(iv.scheduledAt), "HH:mm")}
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <div style={{ marginBottom: "0.6rem" }}>
-                                                <div style={{ fontWeight: 500, fontSize: "0.85rem" }}>
-                                                    {format(new Date(iv.scheduledAt), "d MMM yyyy 'at' HH:mm")}
-                                                </div>
-                                                {iv.location && <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>{iv.location}</div>}
-                                                {(iv.calendarEventId || iv.calendarEventUrl) && (
+                                                {iv.calendarEventId && (
                                                     <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: "0.2rem" }}>
-                                                        Calendar: {iv.calendarEventUrl ? <a href={iv.calendarEventUrl} target="_blank" rel="noreferrer">open invite</a> : iv.calendarEventId}
-                                                        {iv.calendarEventId && iv.calendarEventUrl ? ` · ${iv.calendarEventId}` : ""}
+                                                        Calendar event ID: {iv.calendarEventId}
                                                     </div>
                                                 )}
                                             </div>
 
                                             {iv.interviewers.length > 0 && (
-                                                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                                                <div style={{ marginBottom: "0.5rem" }}>
+                                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.35rem" }}>
+                                                        Attached interviewers
+                                                    </div>
+                                                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                                                     {iv.interviewers.map(({ user }) => (
                                                         <div
                                                             key={user.id}
@@ -523,8 +569,10 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                                         >
                                                             <Avatar user={user} />
                                                             <span style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>{user.name}</span>
+                                                            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Interviewer</span>
                                                         </div>
                                                     ))}
+                                                    </div>
                                                 </div>
                                             )}
 
@@ -552,15 +600,6 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                                             </div>
                                                         </div>
                                                     ))}
-                                                </div>
-                                            )}
-
-                                            {iv.geminiNotes && (
-                                                <div style={{ borderTop: "1px solid var(--border)", marginTop: "0.75rem", paddingTop: "0.65rem" }}>
-                                                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.35rem" }}>
-                                                        Gemini meeting notes
-                                                    </div>
-                                                    <div style={{ color: "var(--text-secondary)", fontSize: "0.82rem", whiteSpace: "pre-wrap" }}>{iv.geminiNotes}</div>
                                                 </div>
                                             )}
 
@@ -607,18 +646,19 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                             )}
 
                                             <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem" }}>
-                                                <Link href={`/interviews/${iv.id}`} className="btn btn-secondary btn-sm">
-                                                    Open Live Workspace
-                                                </Link>
                                                 {canManage && (
-                                                    <button className="btn btn-ghost btn-sm" onClick={() => openSchedule(iv)}>
+                                                    <button className="btn btn-ghost btn-sm" onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openSchedule(iv);
+                                                    }}>
                                                         <Plus size={12} /> Edit Stage
                                                     </button>
                                                 )}
                                                 {canInterviewNote && (
                                                     <button
                                                         className="btn btn-ghost btn-sm"
-                                                        onClick={() => {
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
                                                             setShowInterviewNoteModal(iv);
                                                             setInterviewNote("");
                                                             setInterviewRating(0);
@@ -644,10 +684,23 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
                             <h2 style={{ fontSize: "1rem", fontWeight: 600 }}>General Comments</h2>
                         </div>
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.9rem" }}>
+                            <textarea
+                                className="input"
+                                rows={2}
+                                placeholder="Add an ad-hoc comment"
+                                value={commentInput}
+                                onChange={(e) => setCommentInput(e.target.value)}
+                                style={{ resize: "vertical", background: "rgba(255,255,255,0.98)", borderColor: "var(--border)" }}
+                            />
+                            <button className="btn btn-primary btn-sm" onClick={submitComment} disabled={submitting || !commentInput.trim()}>
+                                Add
+                            </button>
+                        </div>
                         {unifiedComments.length === 0 ? (
                             <div className="empty-state" style={{ padding: "2rem" }}><MessageSquare size={28} /><p>No comments yet</p></div>
                         ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: "360px", overflowY: "auto", marginBottom: "0.75rem" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", maxHeight: "360px", overflowY: "auto" }}>
                                 {unifiedComments.map((comment) => (
                                     <div key={comment.id} style={{
                                         borderLeft: `3px solid ${getInterviewerHighlight(comment.author.id).border}`,
@@ -668,19 +721,6 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                 ))}
                             </div>
                         )}
-                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                            <textarea
-                                className="input"
-                                rows={2}
-                                placeholder="Add an ad-hoc comment"
-                                value={commentInput}
-                                onChange={(e) => setCommentInput(e.target.value)}
-                                style={{ resize: "vertical" }}
-                            />
-                            <button className="btn btn-primary btn-sm" onClick={submitComment} disabled={submitting || !commentInput.trim()}>
-                                Add
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -770,32 +810,30 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                             <div className="grid-2">
                                 <div className="form-group">
-                                    <label>Stage Number</label>
-                                    <input type="number" className="input" min={1} value={interviewStage} onChange={(e) => setInterviewStage(parseInt(e.target.value) || 1)} />
+                                    <label>Stage</label>
+                                    <input className="input" value={`Stage ${interviewStage}`} readOnly />
                                 </div>
-                                <div className="form-group">
-                                    <label>Stage Name</label>
-                                    <input className="input" placeholder="e.g. Technical Screen, Culture Fit" value={interviewStageName} onChange={(e) => setInterviewStageName(e.target.value)} />
-                                </div>
-                            </div>
-                            <div className="grid-2">
-                                <div className="form-group">
-                                    <label>Date &amp; Time *</label>
-                                    <input type="datetime-local" className="input" value={interviewDate} onChange={(e) => setInterviewDate(e.target.value)} />
-                                </div>
-                                <div className="form-group">
-                                    <label>Location / Link</label>
-                                    <input className="input" placeholder="e.g. Google Meet, Office Room 2" value={interviewLocation} onChange={(e) => setInterviewLocation(e.target.value)} />
-                                </div>
-                            </div>
-                            <div className="grid-2">
                                 <div className="form-group">
                                     <label>Calendar Event ID</label>
                                     <input className="input" placeholder="Optional external invite reference" value={calendarEventId} onChange={(e) => setCalendarEventId(e.target.value)} />
                                 </div>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 0.8fr 0.8fr", gap: "1rem" }}>
                                 <div className="form-group">
-                                    <label>Calendar Event URL</label>
-                                    <input className="input" placeholder="Invite / Meet URL" value={calendarEventUrl} onChange={(e) => setCalendarEventUrl(e.target.value)} />
+                                    <label>Date *</label>
+                                    <input type="date" className="input" value={interviewDate} onChange={(e) => setInterviewDate(e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Hour *</label>
+                                    <select className="input" value={interviewHour} onChange={(e) => setInterviewHour(e.target.value)}>
+                                        {HOUR_OPTIONS.map((hour) => <option key={hour} value={hour}>{hour}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Minute *</label>
+                                    <select className="input" value={interviewMinute} onChange={(e) => setInterviewMinute(e.target.value)}>
+                                        {MINUTE_OPTIONS.map((minute) => <option key={minute} value={minute}>{minute}</option>)}
+                                    </select>
                                 </div>
                             </div>
                             <div className="form-group">
@@ -807,29 +845,18 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                 {interviewTemplateId && (() => {
                                     const t = templates.find((t) => t.id === interviewTemplateId);
                                     const qs = t ? parseTemplateQuestions(t.questions) : [];
-                                    return qs.length > 0 ? (
+                                    return t ? (
                                         <div style={{ marginTop: "0.5rem", padding: "0.75rem", background: "var(--surface)", borderRadius: "8px", fontSize: "0.8rem" }}>
-                                            <div style={{ color: "var(--text-muted)", marginBottom: "0.4rem", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Template questions</div>
-                                            <ol style={{ margin: "0 0 0 1rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                                                {qs.map((q, i) => (
-                                                    <li key={i} style={{ color: "var(--text-secondary)" }}>
-                                                        <TemplateContent content={q} compact />
-                                                    </li>
-                                                ))}
-                                            </ol>
+                                            <div style={{ color: "var(--text-muted)", marginBottom: "0.35rem", fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>Template overview</div>
+                                            <div style={{ color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>
+                                                {getInterviewTemplateOverview(t.description, t.questions)}
+                                            </div>
+                                            <div style={{ marginTop: "0.45rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                                {qs.length} structured question{qs.length === 1 ? "" : "s"}
+                                            </div>
                                         </div>
                                     ) : null;
                                 })()}
-                            </div>
-                            <div className="form-group">
-                                <label>Gemini Meeting Notes</label>
-                                <textarea
-                                    className="input"
-                                    rows={4}
-                                    placeholder="Paste Gemini-generated notes or a meeting summary if available."
-                                    value={geminiNotes}
-                                    onChange={(e) => setGeminiNotes(e.target.value)}
-                                />
                             </div>
                             <div className="form-group">
                                 <label>Interviewers</label>
@@ -937,7 +964,7 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                                             const next = e.target.value;
                                                             setInterviewQuestionNotes((prev) => ({ ...prev, [key]: next }));
                                                         }}
-                                                        style={{ resize: "vertical" }}
+                                                        style={{ resize: "vertical", background: "rgba(255,255,255,0.98)", borderColor: "var(--border)" }}
                                                     />
                                                 </div>
                                             );
@@ -958,7 +985,7 @@ export default function CandidatePage({ params }: { params: Promise<{ id: string
                                 <textarea
                                     id="iv-note" className="input" rows={5}
                                     placeholder="Overall summary for this interviewer"
-                                    value={interviewNote} onChange={(e) => setInterviewNote(e.target.value)} style={{ resize: "vertical" }}
+                                    value={interviewNote} onChange={(e) => setInterviewNote(e.target.value)} style={{ resize: "vertical", background: "rgba(255,255,255,0.98)", borderColor: "var(--border)" }}
                                 />
                             </div>
                             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>

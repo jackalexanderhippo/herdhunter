@@ -3,6 +3,24 @@ import { prisma } from "@/lib/db";
 import { PUBLIC_USER_SELECT } from "@/lib/public-user";
 import { NextResponse } from "next/server";
 
+function normalizeOptionalString(value: unknown) {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+async function resolveTemplateStageName(templateId: unknown) {
+    const normalizedTemplateId = normalizeOptionalString(templateId);
+    if (!normalizedTemplateId) return null;
+
+    const template = await prisma.interviewTemplate.findUnique({
+        where: { id: normalizedTemplateId },
+        select: { name: true },
+    });
+
+    return template?.name ?? null;
+}
+
 export async function GET() {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -28,34 +46,39 @@ export async function POST(req: Request) {
     const {
         candidateId,
         scheduledAt,
-        location,
         interviewerIds,
-        stage,
-        stageName,
         templateId,
         calendarEventId,
-        calendarEventUrl,
-        geminiNotes,
-        geminiNotesImportedAt,
     } = await req.json();
     if (!candidateId || !scheduledAt) {
         return NextResponse.json({ error: "candidateId and scheduledAt are required" }, { status: 400 });
     }
 
+    const latestInterview = await prisma.interview.findFirst({
+        where: { candidateId },
+        orderBy: { stage: "desc" },
+        select: { stage: true },
+    });
+    const resolvedTemplateId = normalizeOptionalString(templateId);
+    const nextStage = (latestInterview?.stage ?? 0) + 1;
+    const stageName = await resolveTemplateStageName(resolvedTemplateId);
+
     const interview = await prisma.interview.create({
         data: {
             candidateId,
             scheduledAt: new Date(scheduledAt),
-            location,
-            stage: stage ?? 1,
-            stageName: stageName ?? null,
-            templateId: templateId ?? null,
-            calendarEventId: calendarEventId ?? null,
-            calendarEventUrl: calendarEventUrl ?? null,
-            geminiNotes: geminiNotes ?? null,
-            geminiNotesImportedAt: geminiNotesImportedAt ? new Date(geminiNotesImportedAt) : null,
+            location: null,
+            stage: nextStage,
+            stageName,
+            templateId: resolvedTemplateId,
+            calendarEventId: normalizeOptionalString(calendarEventId),
+            calendarEventUrl: null,
+            geminiNotes: null,
+            geminiNotesImportedAt: null,
             interviewers: {
-                create: (interviewerIds ?? []).map((userId: string) => ({ userId })),
+                create: (interviewerIds ?? [])
+                    .filter((userId: unknown): userId is string => typeof userId === "string" && userId.trim().length > 0)
+                    .map((userId: string) => ({ userId })),
             },
         },
         include: {
